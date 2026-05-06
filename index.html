@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="LabCam">
+<meta name="theme-color" content="#060d0a">
+<link rel="manifest" href="manifest.json">
+<title>LabCam</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500;600&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #060d0a;
+  --surface: #0c1610;
+  --surface2: #111f16;
+  --border: #1a3025;
+  --green: #00e676;
+  --green-dim: #00c853;
+  --green-glow: rgba(0,230,118,0.12);
+  --green-deep: rgba(0,230,118,0.06);
+  --cyan: #00e5ff;
+  --red: #ff1744;
+  --amber: #ffab00;
+  --text: #d4edd8;
+  --muted: #4a7a58;
+  --mono: 'Space Mono', monospace;
+  --head: 'Syne', sans-serif;
+  --body: 'DM Sans', sans-serif;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --tab-h: 62px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: var(--bg); overscroll-behavior: none; }
+body {
+  color: var(--text); font-family: var(--body);
+  padding-top: var(--safe-top);
+  padding-bottom: calc(var(--safe-bottom) + var(--tab-h));
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ── SCANLINE OVERLAY ── */
+body::before {
+  content: ''; pointer-events: none;
+  position: fixed; inset: 0; z-index: 9999;
+  background: repeating-linear-gradient(
+    0deg, transparent, transparent 2px,
+    rgba(0,230,118,0.015) 2px, rgba(0,230,118,0.015) 4px
+  );
+}
+
+/* ── HEADER ── */
+header {
+  position: sticky; top: 0; z-index: 50;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 16px 10px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.header-left { display: flex; align-items: center; gap: 10px; }
+.dna-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green), 0 0 20px rgba(0,230,118,0.4);
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+@keyframes pulse-dot {
+  0%,100% { opacity: 1; transform: scale(1); }
+  50% { opacity: .5; transform: scale(.75); }
+}
+.app-title {
+  font-family: var(--head); font-size: 20px; font-weight: 800;
+  letter-spacing: .08em; color: var(--green);
+  text-shadow: 0 0 20px rgba(0,230,118,0.5);
+}
+.app-sub {
+  font-family: var(--mono); font-size: 9px; color: var(--muted);
+  letter-spacing: .12em; text-transform: uppercase; margin-top: 1px;
+}
+.header-count {
+  font-family: var(--mono); font-size: 10px; color: var(--muted);
+  text-align: right; line-height: 1.6;
+}
+.header-count span { color: var(--green); }
+
+/* ── TAB BAR ── */
+.tab-bar {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+  background: var(--bg); border-top: 1px solid var(--border);
+  display: flex; height: calc(var(--tab-h) + var(--safe-bottom));
+  padding-bottom: var(--safe-bottom);
+}
+.tab-item {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 3px; cursor: pointer; border: none;
+  background: none; color: var(--muted); font-family: var(--mono);
+  font-size: 9px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+  transition: color .15s;
+}
+.tab-item svg { width: 22px; height: 22px; stroke-width: 1.5; }
+.tab-item.active { color: var(--green); }
+.tab-item.active svg { filter: drop-shadow(0 0 4px rgba(0,230,118,0.6)); }
+
+/* ── PAGES ── */
+.page { display: none; }
+.page.active { display: block; }
+
+/* ── CAMERA PAGE ── */
+#page-cam {
+  display: flex; flex-direction: column; padding: 24px 16px; gap: 18px;
+}
+.cam-field-label {
+  font-family: var(--mono); font-size: 9px; letter-spacing: .18em;
+  color: var(--muted); text-transform: uppercase; margin-bottom: 7px;
+  display: flex; align-items: center; gap: 6px;
+}
+.cam-field-label::before {
+  content: ''; width: 14px; height: 1px; background: var(--green); opacity: .5;
+}
+#quick-note {
+  width: 100%; background: var(--surface); border: 1px solid var(--border);
+  color: var(--text); font-family: var(--mono); font-size: 13px;
+  padding: 13px 14px; outline: none;
+  border-radius: 2px;
+}
+#quick-note:focus { border-color: var(--green); box-shadow: 0 0 0 1px rgba(0,230,118,.15), inset 0 0 20px rgba(0,230,118,.03); }
+#quick-note::placeholder { color: var(--muted); }
+
+/* Priority */
+.priority-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.pri-btn {
+  padding: 14px 8px; background: var(--surface); border: 1px solid var(--border);
+  cursor: pointer; text-align: center; transition: all .15s;
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  border-radius: 2px; position: relative; overflow: hidden;
+}
+.pri-btn::after {
+  content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 2px;
+  background: var(--green); transform: scaleX(0); transition: transform .15s;
+}
+.pri-btn.active::after { transform: scaleX(1); }
+.pri-btn .pri-emoji { font-size: 20px; line-height: 1; }
+.pri-btn .pri-label {
+  font-family: var(--mono); font-size: 8px; letter-spacing: .12em;
+  color: var(--muted); text-transform: uppercase;
+}
+.pri-btn.active {
+  border-color: rgba(0,230,118,.4); background: var(--green-glow);
+}
+.pri-btn.active .pri-label { color: var(--green); }
+.pri-none {
+  width: 100%; padding: 10px; background: var(--surface); border: 1px solid var(--border);
+  cursor: pointer; font-family: var(--mono); font-size: 9px; border-radius: 2px;
+  letter-spacing: .12em; color: var(--muted); text-align: center;
+  text-transform: uppercase; transition: all .15s;
+}
+.pri-none.active { border-color: var(--border); background: var(--surface2); color: var(--text); }
+
+.btn-capture {
+  width: 100%; padding: 20px; background: transparent;
+  border: 1px solid var(--green); color: var(--green);
+  font-family: var(--mono); font-size: 14px; font-weight: 700;
+  letter-spacing: .2em; cursor: pointer; text-transform: uppercase;
+  transition: all .15s; display: flex; align-items: center;
+  justify-content: center; gap: 12px; margin-top: 8px;
+  border-radius: 2px; position: relative; overflow: hidden;
+  box-shadow: 0 0 20px rgba(0,230,118,.1), inset 0 0 20px rgba(0,230,118,.04);
+}
+.btn-capture::before {
+  content: ''; position: absolute; inset: 0;
+  background: var(--green-glow); opacity: 0; transition: opacity .15s;
+}
+.btn-capture:active::before { opacity: 1; }
+.btn-capture:active { transform: scale(.98); }
+.btn-capture svg { width: 18px; height: 18px; }
+#file-input { display: none; }
+
+/* ── GALLERY PAGE ── */
+.gallery-toolbar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px; border-bottom: 1px solid var(--border);
+  background: var(--bg); position: sticky; top: 57px; z-index: 40;
+}
+.gallery-toolbar select {
+  flex: 1; background: var(--surface); border: 1px solid var(--border);
+  color: var(--text); font-family: var(--mono); font-size: 11px;
+  padding: 8px 10px; outline: none; border-radius: 2px;
+}
+.gallery-toolbar select:focus { border-color: var(--green); }
+.sort-btn {
+  padding: 8px 10px; background: var(--surface); border: 1px solid var(--border);
+  font-size: 15px; cursor: pointer; transition: all .12s;
+  flex-shrink: 0; border-radius: 2px;
+}
+.sort-btn.active {
+  border-color: rgba(0,230,118,.4); background: var(--green-glow);
+  box-shadow: 0 0 8px rgba(0,230,118,.15);
+}
+.pri-badge {
+  position: absolute; top: 4px; right: 4px;
+  font-size: 9px; line-height: 1;
+}
+.btn-delete-sel {
+  padding: 8px 10px; background: none; border: 1px solid var(--border);
+  color: var(--muted); font-family: var(--mono); font-size: 10px;
+  cursor: pointer; white-space: nowrap; display: none; border-radius: 2px;
+}
+.btn-delete-sel.show { display: block; color: var(--red); border-color: var(--red); }
+
+.date-group { margin-bottom: 2px; }
+.date-label {
+  font-family: var(--mono); font-size: 9px; letter-spacing: .14em;
+  color: var(--muted); text-transform: uppercase;
+  padding: 9px 14px 5px; background: var(--bg);
+  position: sticky; top: 107px; z-index: 30;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 8px;
+}
+.date-label::before {
+  content: ''; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--green); flex-shrink: 0;
+  box-shadow: 0 0 6px rgba(0,230,118,.6);
+}
+.photo-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; padding: 2px;
+}
+.photo-thumb {
+  aspect-ratio: 1; position: relative; overflow: hidden; cursor: pointer;
+  background: var(--surface);
+}
+.photo-thumb img {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+  transition: filter .15s;
+  filter: saturate(0.9);
+}
+.photo-thumb:hover img { filter: saturate(1.1); }
+.photo-thumb.selected::after {
+  content: '✓'; position: absolute; inset: 0;
+  background: rgba(0,230,118,.35); display: flex; align-items: center;
+  justify-content: center; font-size: 28px; font-weight: bold;
+  color: var(--green); text-shadow: 0 0 10px rgba(0,230,118,.8);
+}
+.photo-thumb .note-badge {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  background: rgba(6,13,10,.85); font-family: var(--mono); font-size: 8px;
+  color: var(--green); padding: 3px 5px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+  border-top: 1px solid rgba(0,230,118,.2);
+}
+.empty-state {
+  text-align: center; padding: 60px 24px;
+  font-family: var(--mono); font-size: 11px; color: var(--muted); line-height: 2.2;
+}
+.empty-state svg { width: 48px; height: 48px; opacity: .15; margin-bottom: 16px; stroke: var(--green); }
+
+/* ── LIGHTBOX ── */
+#lightbox {
+  display: none; position: fixed; inset: 0; z-index: 200;
+  background: rgba(6,13,10,.97); flex-direction: column;
+  align-items: center; justify-content: center;
+}
+#lightbox.open { display: flex; }
+#lb-img {
+  max-width: 100%; max-height: 68vh; object-fit: contain;
+  border: 1px solid var(--border);
+}
+.lb-meta {
+  padding: 14px 16px; text-align: center;
+  font-family: var(--mono); font-size: 11px; color: var(--muted); line-height: 1.9;
+}
+.lb-note { color: var(--green); font-size: 13px; margin-bottom: 4px; }
+.lb-actions { display: flex; gap: 8px; padding: 0 16px 16px; width: 100%; }
+.lb-btn {
+  flex: 1; padding: 13px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text);
+  font-family: var(--mono); font-size: 12px; font-weight: 700;
+  letter-spacing: .08em; cursor: pointer; text-transform: uppercase;
+  border-radius: 2px;
+}
+.lb-btn.danger { border-color: var(--red); color: var(--red); }
+.lb-close {
+  position: absolute; top: calc(var(--safe-top) + 12px); right: 16px;
+  background: none; border: 1px solid var(--border); color: var(--muted);
+  font-size: 18px; cursor: pointer; padding: 4px 10px; border-radius: 2px;
+  font-family: var(--mono);
+}
+
+/* ── TOAST ── */
+#toast {
+  position: fixed; bottom: calc(var(--tab-h) + var(--safe-bottom) + 12px);
+  left: 50%; transform: translateX(-50%) translateY(16px);
+  background: var(--surface2); border: 1px solid rgba(0,230,118,.25);
+  font-family: var(--mono); font-size: 11px; color: var(--green);
+  padding: 10px 18px; white-space: nowrap; opacity: 0;
+  transition: all .2s; z-index: 300; pointer-events: none;
+  border-radius: 2px; box-shadow: 0 0 20px rgba(0,230,118,.15);
+}
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <div class="dna-dot"></div>
+    <div>
+      <div class="app-title">LABCAM</div>
+      <div class="app-sub">LAB SPECIMEN RECORDER</div>
+    </div>
+  </div>
+  <div class="header-count" id="header-count"></div>
+</header>
+
+<!-- CAMERA PAGE -->
+<div class="page active" id="page-cam">
+  <div>
+    <div class="cam-field-label">Specimen Note</div>
+    <input type="text" id="quick-note" placeholder="Cell type, slide #, condition…" maxlength="80">
+  </div>
+  <div>
+    <div class="cam-field-label">Priority</div>
+    <div class="priority-row">
+      <button class="pri-btn" data-pri="1" onclick="setPriority(1)">
+        <span class="pri-emoji">🔬🔬🔬</span>
+        <span class="pri-label">Critical</span>
+      </button>
+      <button class="pri-btn" data-pri="2" onclick="setPriority(2)">
+        <span class="pri-emoji">🔬🔬</span>
+        <span class="pri-label">Moderate</span>
+      </button>
+      <button class="pri-btn" data-pri="3" onclick="setPriority(3)">
+        <span class="pri-emoji">🔬</span>
+        <span class="pri-label">Routine</span>
+      </button>
+    </div>
+    <button class="pri-none active" id="pri-none-btn" onclick="setPriority(0)">Untagged</button>
+  </div>
+  <button class="btn-capture" onclick="openCamera()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <circle cx="12" cy="12" r="10"/>
+      <circle cx="12" cy="12" r="3" fill="currentColor"/>
+      <line x1="12" y1="2" x2="12" y2="5"/>
+      <line x1="12" y1="19" x2="12" y2="22"/>
+      <line x1="2" y1="12" x2="5" y2="12"/>
+      <line x1="19" y1="12" x2="22" y2="12"/>
+    </svg>
+    CAPTURE SPECIMEN
+  </button>
+  <input type="file" id="file-input" accept="image/*" capture="environment" onchange="handleCapture(this)">
+</div>
+
+<!-- GALLERY PAGE -->
+<div class="page" id="page-gallery">
+  <div class="gallery-toolbar">
+    <select id="date-filter" onchange="renderGallery()">
+      <option value="all">All Sessions</option>
+    </select>
+    <button class="sort-btn active" id="sort-date" onclick="setSort('date')">📅</button>
+    <button class="sort-btn" id="sort-pri" onclick="setSort('priority')">🔬</button>
+    <button class="btn-delete-sel" id="btn-delete-sel" onclick="deleteSelected()">PURGE</button>
+  </div>
+  <div id="gallery-content"></div>
+</div>
+
+<!-- LIGHTBOX -->
+<div id="lightbox">
+  <button class="lb-close" onclick="closeLightbox()">✕</button>
+  <img id="lb-img" src="" alt="">
+  <div class="lb-meta">
+    <div class="lb-note" id="lb-note"></div>
+    <div id="lb-date"></div>
+  </div>
+  <div class="lb-actions">
+    <button class="lb-btn" onclick="sharePhoto()">EXPORT</button>
+    <button class="lb-btn danger" onclick="deletePhoto()">DISCARD</button>
+  </div>
+</div>
+
+<!-- TAB BAR -->
+<div class="tab-bar">
+  <button class="tab-item active" onclick="showPage('cam', this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <circle cx="12" cy="12" r="9"/>
+      <circle cx="12" cy="12" r="3"/>
+      <line x1="12" y1="3" x2="12" y2="6"/>
+      <line x1="12" y1="18" x2="12" y2="21"/>
+      <line x1="3" y1="12" x2="6" y2="12"/>
+      <line x1="18" y1="12" x2="21" y2="12"/>
+    </svg>
+    Capture
+  </button>
+  <button class="tab-item" onclick="showPage('gallery', this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <rect x="3" y="3" width="18" height="18" rx="1"/>
+      <circle cx="8.5" cy="8.5" r="1.5"/>
+      <polyline points="21 15 16 10 5 21"/>
+    </svg>
+    Specimens
+  </button>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ── STORAGE ────────────────────────────────────────────
+const DB_KEY = 'labcam_photos';
+let photos = [];
+let selectedIds = new Set();
+let lightboxId = null;
+let currentPriority = 0;
+let currentSort = 'date';
+
+function load() {
+  try {
+    const raw = localStorage.getItem(DB_KEY);
+    photos = raw ? JSON.parse(raw) : [];
+  } catch { photos = []; }
+}
+function save() {
+  try { localStorage.setItem(DB_KEY, JSON.stringify(photos)); } catch(e) {
+    toast('// STORAGE FULL — discard old specimens');
+  }
+}
+
+// ── PRIORITY ──────────────────────────────────────────
+function setPriority(p) {
+  currentPriority = p;
+  document.querySelectorAll('.pri-btn').forEach(btn => {
+    btn.classList.toggle('active', parseInt(btn.dataset.pri) === p);
+  });
+  document.getElementById('pri-none-btn').classList.toggle('active', p === 0);
+}
+
+function setSort(mode) {
+  currentSort = mode;
+  document.getElementById('sort-date').classList.toggle('active', mode === 'date');
+  document.getElementById('sort-pri').classList.toggle('active', mode === 'priority');
+  document.getElementById('date-filter').style.display = mode === 'priority' ? 'none' : '';
+  renderGallery();
+}
+
+// ── CAMERA ────────────────────────────────────────────
+function openCamera() {
+  document.getElementById('file-input').click();
+}
+
+function handleCapture(input) {
+  const files = Array.from(input.files);
+  if (!files.length) return;
+  const note = document.getElementById('quick-note').value.trim();
+  const pri = currentPriority;
+  let done = 0;
+  files.forEach(file => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 1600;
+        let w = img.width, h = img.height;
+        if (w > MAX || h > MAX) {
+          const ratio = Math.min(MAX/w, MAX/h);
+          w = Math.round(w * ratio); h = Math.round(h * ratio);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+        addPhoto(dataUrl, note, pri, new Date(file.lastModified || Date.now()));
+        done++;
+        if (done === files.length) {
+          const priLabel = pri === 1 ? ' 🔬🔬🔬' : pri === 2 ? ' 🔬🔬' : pri === 3 ? ' 🔬' : '';
+          toast(`// SPECIMEN LOGGED${priLabel}`);
+          document.getElementById('quick-note').value = '';
+          setPriority(0);
+        }
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+  input.value = '';
+}
+
+function addPhoto(dataUrl, note, priority, date) {
+  const id = Date.now() + Math.random().toString(36).slice(2);
+  photos.unshift({ id, dataUrl, note: note||'', priority: priority||0, date: (date||new Date()).toISOString() });
+  save();
+  updateHeaderCount();
+  updateDateFilter();
+}
+
+// ── GALLERY ────────────────────────────────────────────
+function groupByDate(list) {
+  const groups = {};
+  list.forEach(p => {
+    const d = new Date(p.date);
+    const key = d.toLocaleDateString('en-CA');
+    const label = d.toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+    if (!groups[key]) groups[key] = { label, items:[] };
+    groups[key].items.push(p);
+  });
+  return Object.entries(groups).sort((a,b) => b[0].localeCompare(a[0]));
+}
+
+function renderGallery() {
+  const filter = document.getElementById('date-filter').value;
+  let list = filter === 'all' ? [...photos] : photos.filter(p => {
+    return new Date(p.date).toLocaleDateString('en-CA') === filter;
+  });
+
+  const el = document.getElementById('gallery-content');
+  if (!list.length) {
+    el.innerHTML = `<div class="empty-state">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="3" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="21"/><line x1="3" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="21" y2="12"/></svg>
+      <div>// NO SPECIMENS LOGGED<br>Go to Capture to begin</div>
+    </div>`;
+    return;
+  }
+
+  if (currentSort === 'priority') {
+    list.sort((a, b) => {
+      const pa = a.priority || 0, pb = b.priority || 0;
+      if (pa === 0 && pb !== 0) return 1;
+      if (pb === 0 && pa !== 0) return -1;
+      if (pa !== pb) return pa - pb;
+      return new Date(b.date) - new Date(a.date);
+    });
+    const priGroups = { 1: [], 2: [], 3: [], 0: [] };
+    list.forEach(p => { priGroups[p.priority || 0].push(p); });
+    const priLabels = { 1: '🔬🔬🔬 Critical', 2: '🔬🔬 Moderate', 3: '🔬 Routine', 0: 'Untagged' };
+    el.innerHTML = [1, 2, 3, 0].filter(k => priGroups[k].length > 0).map(k => `
+      <div class="date-group">
+        <div class="date-label">${priLabels[k]} · ${priGroups[k].length} specimen${priGroups[k].length>1?'s':''}</div>
+        <div class="photo-grid">${priGroups[k].map(p => thumbHTML(p)).join('')}</div>
+      </div>`).join('');
+  } else {
+    const groups = groupByDate(list);
+    el.innerHTML = groups.map(([key, grp]) => `
+      <div class="date-group">
+        <div class="date-label">${grp.label} · ${grp.items.length} specimen${grp.items.length>1?'s':''}</div>
+        <div class="photo-grid">${grp.items.map(p => thumbHTML(p)).join('')}</div>
+      </div>`).join('');
+  }
+}
+
+function thumbHTML(p) {
+  const priEmoji = p.priority === 1 ? '🔬🔬🔬' : p.priority === 2 ? '🔬🔬' : p.priority === 3 ? '🔬' : '';
+  return `<div class="photo-thumb${selectedIds.has(p.id)?' selected':''}" id="thumb-${p.id}"
+    onclick="thumbClick('${p.id}')" oncontextmenu="thumbLongPress('${p.id}');return false;">
+    <img src="${p.dataUrl}" loading="lazy" alt="">
+    ${priEmoji ? `<div class="pri-badge">${priEmoji}</div>` : ''}
+    ${p.note ? `<div class="note-badge">${escHtml(p.note)}</div>` : ''}
+  </div>`;
+}
+
+function thumbClick(id) {
+  if (selectedIds.size > 0) toggleSelect(id);
+  else openLightbox(id);
+}
+function thumbLongPress(id) { toggleSelect(id); }
+function toggleSelect(id) {
+  if (selectedIds.has(id)) selectedIds.delete(id);
+  else selectedIds.add(id);
+  document.getElementById('thumb-'+id)?.classList.toggle('selected', selectedIds.has(id));
+  const btn = document.getElementById('btn-delete-sel');
+  btn.classList.toggle('show', selectedIds.size > 0);
+  btn.textContent = selectedIds.size > 0 ? `PURGE ${selectedIds.size}` : '';
+}
+function deleteSelected() {
+  if (!selectedIds.size) return;
+  if (!confirm(`Discard ${selectedIds.size} specimen${selectedIds.size>1?'s':''}? Cannot be recovered.`)) return;
+  photos = photos.filter(p => !selectedIds.has(p.id));
+  selectedIds.clear();
+  save(); updateHeaderCount(); updateDateFilter(); renderGallery();
+  document.getElementById('btn-delete-sel').classList.remove('show');
+  toast('// SPECIMENS DISCARDED');
+}
+
+function updateDateFilter() {
+  const sel = document.getElementById('date-filter');
+  const current = sel.value;
+  const dates = [...new Set(photos.map(p => new Date(p.date).toLocaleDateString('en-CA')))].sort().reverse();
+  sel.innerHTML = '<option value="all">All Sessions</option>' +
+    dates.map(d => {
+      const label = new Date(d+'T12:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
+      return `<option value="${d}"${d===current?' selected':''}>Session: ${label}</option>`;
+    }).join('');
+}
+
+function updateHeaderCount() {
+  const el = document.getElementById('header-count');
+  el.innerHTML = `<div><span>${photos.length}</span> SPECIMEN${photos.length!==1?'S':''}</div>`;
+}
+
+// ── LIGHTBOX ────────────────────────────────────────────
+function openLightbox(id) {
+  const p = photos.find(x => x.id === id);
+  if (!p) return;
+  lightboxId = id;
+  document.getElementById('lb-img').src = p.dataUrl;
+  const priLabel = p.priority === 1 ? '🔬🔬🔬 Critical' : p.priority === 2 ? '🔬🔬 Moderate' : p.priority === 3 ? '🔬 Routine' : '';
+  document.getElementById('lb-note').textContent = p.note || '';
+  document.getElementById('lb-date').textContent =
+    (priLabel ? priLabel + '  ·  ' : '') +
+    new Date(p.date).toLocaleString('en-US', {
+      weekday:'short', month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit'
+    });
+  document.getElementById('lightbox').classList.add('open');
+}
+function closeLightbox() {
+  document.getElementById('lightbox').classList.remove('open');
+  document.getElementById('lb-img').src = '';
+  lightboxId = null;
+}
+function deletePhoto() {
+  if (!lightboxId) return;
+  if (!confirm('Discard this specimen?')) return;
+  photos = photos.filter(p => p.id !== lightboxId);
+  save(); updateHeaderCount(); updateDateFilter(); renderGallery();
+  closeLightbox();
+  toast('// SPECIMEN DISCARDED');
+}
+async function sharePhoto() {
+  const p = photos.find(x => x.id === lightboxId);
+  if (!p) return;
+  try {
+    const res = await fetch(p.dataUrl);
+    const blob = await res.blob();
+    const file = new File([blob], `labcam-${lightboxId}.jpg`, { type: 'image/jpeg' });
+    if (navigator.share && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: p.note || 'Lab specimen' });
+    } else {
+      const a = document.createElement('a');
+      a.href = p.dataUrl; a.download = `labcam-${lightboxId}.jpg`; a.click();
+    }
+  } catch(e) { if (e.name !== 'AbortError') toast('// EXPORT FAILED'); }
+}
+
+// ── UTILS ────────────────────────────────────────────
+function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2400);
+}
+
+function showPage(id, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  btn.classList.add('active');
+  if (id === 'gallery') renderGallery();
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
+document.getElementById('lightbox').addEventListener('click', e => {
+  if (e.target === document.getElementById('lightbox')) closeLightbox();
+});
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
+// ── INIT ────────────────────────────────────────────
+load();
+updateHeaderCount();
+updateDateFilter();
+</script>
+</body>
+</html>
